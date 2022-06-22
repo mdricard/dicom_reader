@@ -105,6 +105,26 @@ Planar configuration (0028,0006) defines how the color channels are arranged in 
         self.mz_pts[self.n_pts] = C[2, 0]
         # print(C)
 
+    def paintEvent(self, event):
+        # QPainter::drawEllipse(int x, int y, int width, int height)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        pixmap = QPixmap("d:/heart.png")
+        painter.drawPixmap(self.rect(), pixmap)
+        pen = QPen(Qt.red, 2)
+        painter.setPen(pen)
+        if self.n_pts == 2:
+            painter.drawLine(
+                self.mx_pts[0], self.my_pts[0], self.mx_pts[1], self.my_pts[1])
+            pts = self.midPoints(0.50)
+            # pts[x_percent, y_percent, radius, x_left, y_left, x_right, y_right]
+            painter.drawEllipse(QtCore.QPointF(pts[0], pts[1]), pts[2], pts[2])
+            painter.drawLine(QtCore.QPointF(
+                pts[3], pts[4]),  QtCore.QPointF(pts[5], pts[6]))
+        elif self.n_pts == 3:
+            self.radius_of_curvature()
+
+
     def read_dicom_image(self, file_name):
         path = 'D:/2022_Dicom_Sorted/nelson01082021/20210108/#-#_data_s168314_3tbcardiac_3tb7831/mid_sax_cine/'
         #path = 'C:/Users/mdr24/OneDrive - University of Texas at Arlington/3TB8554b_Healthy/'
@@ -144,6 +164,56 @@ Planar configuration (0028,0006) defines how the color channels are arranged in 
         q_img = qimage2ndarray.array2qimage(zoomed, True)
         return q_img
 
+    def midPoints(self, percent):
+        """
+        Computes point on the line between (mx_pts[0], my_pts[0]) and (mx_pts[1], my_pts[1])
+        The variable percent is the percent distance between point 0 and point 1
+        self.midPoints(0.25) computes 25% of the distance between point 0 and point 1
+        self.midPoints(0.50) computes 50% of the distance between point 0 and point 1
+        The values returned[x_left, y_left, x_right, y_right] are the right and left
+        x, y coordinates of a line perpendicular to the line formed by
+        (mx_pts[0], my_pts[0]) and (mx_pts[1], my_pts[1]) located at the 50% (percent) point.
+        """
+        x_percent = self.mx_pts[0] + (percent * (self.mx_pts[1] - self.mx_pts[0]))
+        y_percent = self.my_pts[0] + (percent * (self.my_pts[1] - self.my_pts[0]))
+        radius = math.sqrt(((self.mx_pts[0] - x_percent) ** 2) + ((self.my_pts[0] - y_percent) ** 2))
+        # below is the perpendicular slope to pts[0] and pts[1]
+        m = (self.my_pts[1] - self.my_pts[0]) / (self.mx_pts[1] - self.mx_pts[0])
+        slope = -1.0 / m  # this is perpendicular slope
+        # y intercept perpendicular line
+        b = (-slope * x_percent) + y_percent
+        x_left = x_percent - 100.0
+        y_left = (slope * x_left) + b
+        x_right = x_percent + 100.0
+        y_right = (slope * x_right) + b
+            # print("slope = ", m)
+            # print("b = ", b)
+            # print("Per Slope: ", slope)
+            # return [x_left, y_left, x_right, y_right]
+        return [x_percent, y_percent, radius, x_left, y_left, x_right, y_right]
+
+    def radius_of_curvature(self):
+        """Xa = 406, Ya = 388, Xb = 385, Yb = 451, Xc = 420, Yc = 507 """
+        Xa = self.mx_pts[0]
+        Ya = self.my_pts[0]
+        Xc = self.mx_pts[1]
+        Yc = self.my_pts[1]
+        Xb = self.mx_pts[2]
+        Yb = self.my_pts[2]
+
+        D = (Xb ** 2) + (Yb ** 2) - (Xa ** 2) - (Ya ** 2)
+        E = -(Xb ** 2) - (Yb ** 2) + (Xc ** 2) + (Yc ** 2)
+        F = 2.0 * (Xb - Xa)
+        G = 2.0 * (Yb - Ya)
+        H = 2.0 * (Xc - Xb)
+        I = 2.0 * (Yc - Yb)
+        Xm = ((D * I) - (G * E)) / ((I * F) - (G * H))
+        Ym = ((E * F) - (H * D)) / ((I * F) - (G * H))
+        Ra = math.sqrt(((Xa - Xm) ** 2) + ((Ya - Ym) ** 2))
+        pixel_size = self.scale_factor * self.x_pixel_spacing
+        R = Ra / pixel_size
+        curvature = 1.0 / R
+        #print(curvature)
 
 
 class MainFrame(QMainWindow):
